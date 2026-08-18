@@ -15,7 +15,7 @@ pub async fn receive(ip: &str, port: u16) -> Result<(String, Vec<u8>)> {
 
 pub async fn run(ip: &str, port: u16) -> Result<()> {
     let (mime, data) = receive(ip, port).await?;
-    crate::clipboard::set(&mime, &data)?;
+    crate::clipboard::set(&mime, &data).await?;
     println!("Pulled {mime} ({} bytes) from Windows into clipboard.", data.len());
     Ok(())
 }

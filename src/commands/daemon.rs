@@ -42,7 +42,7 @@ async fn get_focused_wm_class(proxy: &WindowCallsProxy<'_>) -> Option<String> {
 async fn on_focus_in(state: &mut State, ip: &str, port: u16) {
     eprintln!("[clip-sync] VMware focused");
 
-    match clipboard::get() {
+    match clipboard::get().await {
         Ok((mime, data)) => {
             let hash = clipboard::hash(&data);
             let dirty = state.linux_hash.map_or(true, |h| h != hash);
@@ -79,7 +79,7 @@ async fn on_focus_out(state: &mut State, ip: &str, port: u16) {
     if should_pull {
         eprintln!("[clip-sync] Windows clipboard changed — pulling to Linux");
         match pull::receive(ip, port).await {
-            Ok((mime, data)) => match clipboard::set(&mime, &data) {
+            Ok((mime, data)) => match clipboard::set(&mime, &data).await {
                 Ok(()) => {
                     eprintln!("[clip-sync] Pulled {mime} ({} bytes)", data.len());
                     state.linux_hash = Some(clipboard::hash(&data));
@@ -117,7 +117,7 @@ pub async fn run(ip: String, port: u16, vm_class: String) -> Result<()> {
 
     // Take initial Linux clipboard snapshot so first focus-in doesn't always push.
     let mut state = State {
-        linux_hash: clipboard::get().ok().map(|(_, d)| clipboard::hash(&d)),
+        linux_hash: clipboard::get().await.ok().map(|(_, d)| clipboard::hash(&d)),
         windows_seq: None,
         vm_focused: false,
     };

@@ -50,7 +50,7 @@ pub async fn run(ip: &str, port: u16) -> anyhow::Result<()> {
     println!("\n\x1b[1mWayland Clipboard\x1b[0m");
 
     let test_str = b"clip-sync-doctor-test";
-    let clipboard_ok = match clipboard::set("text/plain", test_str) {
+    let clipboard_ok = match clipboard::set("text/plain", test_str).await {
         Err(e) => {
             any_fail = true;
             Check::fail("wl-copy (write)", format!("{e}")).print();
@@ -58,7 +58,7 @@ pub async fn run(ip: &str, port: u16) -> anyhow::Result<()> {
         }
         Ok(()) => {
             Check::ok("wl-copy (write)").print();
-            match clipboard::get() {
+            match clipboard::get().await {
                 Err(e) => {
                     any_fail = true;
                     Check::fail("wl-paste (read)", format!("{e}")).print();

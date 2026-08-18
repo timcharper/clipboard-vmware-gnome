@@ -1,6 +1,9 @@
 # clip-sync
 
-Bidirectional clipboard sync between a Linux (Wayland) host and a Windows VMware guest, since VMware's clipboard integration doesn't work with Wayland.
+Bidirectional clipboard sync between a Linux (Wayland) host and either a
+Windows VMware guest (clipboard integration doesn't work with Wayland there)
+or a second Linux/Wayland host (e.g. paired over DeskFlow, whose own
+Wayland clipboard support is unreliable — see "Linux-to-Linux mode" below).
 
 ## Requirements
 
@@ -59,6 +62,67 @@ The VM window is identified by WM class `Vmplayer` by default. Override with:
 export CLIP_SYNC_VM_CLASS=Vmplayer   # default
 clip-sync daemon
 ```
+
+## Linux-to-Linux mode
+
+For two Linux/Wayland hosts (instead of a Windows VM guest) — built for
+pairing with [DeskFlow](https://github.com/deskflow/deskflow), whose own
+Wayland clipboard sync is unreliable
+([deskflow#7600](https://github.com/deskflow/deskflow/issues/7600),
+[#8031](https://github.com/deskflow/deskflow/issues/8031),
+[#8165](https://github.com/deskflow/deskflow/issues/8165)).
+
+Deliberately **not** an open TCP port: `serve-unix` only listens on a local
+Unix domain socket, reached from the peer over a persistent `ssh -L` tunnel.
+That piggybacks on your existing `~/.ssh` key auth/`authorized_keys` and
+encryption instead of exposing an unauthenticated port that would let
+anyone on the LAN read or overwrite the clipboard.
+
+Recommended: wrap both ends in `systemd --user` units so the tunnel
+auto-reconnects and the daemon survives reboots — one running
+`clip-sync serve-unix` (bind `$XDG_RUNTIME_DIR/clip-sync.sock`) on the
+machine being pushed/pulled to, one running a persistent `ssh -N -L`
+forward (`ServerAlive*`/`ExitOnForwardFailure` + `Restart=always`) on the
+machine doing the pushing/pulling. Not included here — the unit files are
+deployment-specific (hostnames, socket paths). Once both are up:
+
+```bash
+export CLIP_SYNC_SOCKET=~/.local/state/clip-sync-peer.sock
+clip-sync push
+clip-sync pull
+```
+
+`serve-unix` implements the same wire protocol as `clipboard-guest.ps1`
+(push, pull, get-seq — including non-text MIME types, images included), so
+`push`/`pull` work unmodified against it once `CLIP_SYNC_SOCKET` is set.
+
+There's no `daemon` mode for this pairing — DeskFlow doesn't expose any
+D-Bus signal, IPC socket, or config-level hook for "cursor just switched
+hosts" (checked: `org.deskflow.deskflow` isn't an activatable bus name, and
+its config schema has no generic on-enter/on-leave action, unlike its
+keystroke/hotkey bindings). Instead, tail deskflow-core's log file and sync
+on the real protocol-level switch events — not a heuristic proxy:
+
+```bash
+# deskflow-core must be logging to a real file, e.g.:
+deskflow-core server >~/.local/state/deskflow-core.log 2>&1 &
+
+export CLIP_SYNC_SOCKET=~/.local/state/clip-sync-peer.sock
+tail -n0 -F ~/.local/state/deskflow-core.log | while IFS= read -r line; do
+  case "$line" in
+    *"leaving screen"*)  clip-sync push ;;
+    *"entering screen"*) clip-sync pull ;;
+  esac
+done
+```
+
+Only the DeskFlow *server* (the machine with the physical mouse) ever logs
+`leaving screen`/`entering screen` — the client never sees an equivalent
+line of its own. So run the watcher above only there, driving both
+directions from its single log: `leaving screen` pushes the local clipboard
+to the peer, `entering screen` pulls the peer's clipboard back. The peer
+just needs `serve-unix` running — no watcher, no log file, nothing
+client-side beyond the daemon.
 
 ## How it works
 

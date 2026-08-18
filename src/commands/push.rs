@@ -14,6 +14,6 @@ pub async fn send(ip: &str, port: u16, mime: &str, data: &[u8]) -> Result<()> {
 }
 
 pub async fn run(ip: &str, port: u16) -> Result<()> {
-    let (mime, data) = crate::clipboard::get()?;
+    let (mime, data) = crate::clipboard::get().await?;
     send(ip, port, &mime, &data).await
 }
